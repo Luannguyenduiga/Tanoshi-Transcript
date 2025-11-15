@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os, uuid, subprocess, shutil
+from networkx import draw
 import whisper
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
@@ -36,9 +37,9 @@ kks.setMode("K", "a")
 converter = kks.getConverter()
 
 def make_karaoke_frame(words, current_time, fonts, base_texts, bg_frame_path):
-    font_romaji = ImageFont.truetype(fonts["jp"], 32)
-    font_jp = ImageFont.truetype(fonts["jp"], 48)
-    font_en = ImageFont.truetype(fonts["en"], 30)
+    font_romaji = ImageFont.truetype(fonts["jp"], 25)
+    font_jp = ImageFont.truetype(fonts["jp"], 30)
+    font_en = ImageFont.truetype(fonts["en"], 20)
 
     w, h = 1280, 720
     img = Image.new("RGB", (w, h), (0, 0, 0))
@@ -47,13 +48,14 @@ def make_karaoke_frame(words, current_time, fonts, base_texts, bg_frame_path):
     bg = Image.open(bg_frame_path).resize((w, h - 200))
     img.paste(bg, (0, 0))
 
-    jp_words = [word["word"].strip() for word in words]
+    
     romaji_words = [converter.do(word["word"].strip()) for word in words]
+    jp_words = [word["word"].strip() for word in words]
     en_words = [""] * len(words)
 
-    spacing = 20
+    spacing = 15
     total_width = 0
-    word_metrics = []
+    word_metrics = [] 
 
     for i in range(len(jp_words)):
         jp_w = font_jp.getlength(jp_words[i])
@@ -75,15 +77,21 @@ def make_karaoke_frame(words, current_time, fonts, base_texts, bg_frame_path):
         if current_time >= words[i]["end"] + delay:
             color = (255, 215, 0)
 
+        y_romaji = h - 180
+        y_jp = y_romaji + 60
+        y_en = y_jp + 60
+
+        # Vẽ Romaji (tiếng phiên âm)
+        x_romaji = x_cursor + (max_w - romaji_w) // 2
+        draw.text((x_romaji, y_romaji), romaji_words[i], font=font_romaji, fill=(200, 200, 200))
+
+        # Vẽ Kanji/Hiragana (tiếng Nhật gốc)
         x_jp = x_cursor + (max_w - jp_w) // 2
         draw.text((x_jp, y_jp), jp_words[i], font=font_jp, fill=color)
 
-        x_romaji = x_cursor + (max_w - romaji_w) // 2
-        draw.text((x_romaji, y_jp + 70), romaji_words[i], font=font_romaji, fill=(200, 200, 200))
-
-        x_en = x_cursor + (max_w - en_w) // 2
-        draw.text((x_en, y_jp + 120), "", font=font_en, fill=(255, 255, 255))
-
+        # Vẽ English (tiếng Anh)
+        # x_en = x_cursor + (max_w - en_w) // 2
+        # draw.text((x_en, y_en), en_words[i], font=font_en, fill=(255, 255, 255))
         x_cursor += max_w + spacing
 
     if base_texts["en"].strip():
@@ -200,5 +208,5 @@ async def generate_video(audio: UploadFile = File(...), video: UploadFile = File
 
     print("Tổng số frame:", frame_index)
     print("Thời lượng video:", frame_index / fps, "giây")
-
+# Trả về file video đã tạo
     return FileResponse(output_path, media_type="video/mp4", filename="karaoke_output.mp4")
